@@ -29,6 +29,11 @@ function authMiddleware(req, res, next) {
   next();
 }
 
+// Função para converter valores em booleano
+function toBoolean(value) {
+  return value === 'true' || value === true;
+}
+
 // Inserir nova interação
 app.post('/interacoes', authMiddleware, async (req, res) => {
   const {
@@ -56,10 +61,10 @@ app.post('/interacoes', authMiddleware, async (req, res) => {
       ani,
       callid,
       cpf,
-      solicitou_fatura,
-      solicitou_recibo,
-      solicitou_ir,
-      solicitou_carteirinha
+      toBoolean(solicitou_fatura),
+      toBoolean(solicitou_recibo),
+      toBoolean(solicitou_ir),
+      toBoolean(solicitou_carteirinha)
     ];
 
     await pool.query(sql, values);
@@ -80,7 +85,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   campos.forEach((campo, idx) => {
     if (req.body.hasOwnProperty(campo)) {
       // Garantir que o valor seja booleano
-      const valor = req.body[campo] === 'true' || req.body[campo] === true;
+      const valor = toBoolean(req.body[campo]);
       atualizacoes.push(`${campo} = $${idx + 1}`);
       valores.push(valor);
     }
