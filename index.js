@@ -150,6 +150,68 @@ app.get('/interacoes', authMiddleware, async (req, res) => {
   }
 });
 
+// Nova rota para contar o número de interações com filtros
+app.get('/interacoes/count', authMiddleware, async (req, res) => {
+  const { cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, dias } = req.query;
+  const campos = {
+    fatura: 'solicitou_fatura',
+    recibo: 'solicitou_recibo',
+    ir: 'solicitou_ir',
+    carteirinha: 'solicitou_carteirinha'
+  };
+
+  const filtros = [];
+  const valores = [];
+  let idx = 1;
+
+  // Filtro por CPF
+  if (cpf) {
+    filtros.push(`cpf = $${idx++}`);
+    valores.push(cpf);
+  }
+
+  // Filtro para cada tipo de solicitação (se for passado no query string)
+  if (solicitou_fatura !== undefined) {
+    filtros.push(`solicitou_fatura = $${idx++}`);
+    valores.push(toBoolean(solicitou_fatura));
+  }
+
+  if (solicitou_recibo !== undefined) {
+    filtros.push(`solicitou_recibo = $${idx++}`);
+    valores.push(toBoolean(solicitou_recibo));
+  }
+
+  if (solicitou_ir !== undefined) {
+    filtros.push(`solicitou_ir = $${idx++}`);
+    valores.push(toBoolean(solicitou_ir));
+  }
+
+  if (solicitou_carteirinha !== undefined) {
+    filtros.push(`solicitou_carteirinha = $${idx++}`);
+    valores.push(toBoolean(solicitou_carteirinha));
+  }
+
+  // Filtro pela quantidade de dias
+  if (dias) {
+    filtros.push(`data >= NOW() - INTERVAL '${dias} DAYS'`);
+  }
+
+  // Consulta SQL para contar registros
+  const sql = `
+    SELECT COUNT(*) AS total
+    FROM interacoes
+    ${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''}
+  `;
+
+  try {
+    const result = await pool.query(sql, valores);
+    res.json({ total: parseInt(result.rows[0].total, 10) });
+  } catch (error) {
+    console.error('Erro ao contar interações:', error);
+    res.status(500).json({ error: 'Erro ao contar interações' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`API rodando na porta ${port}`);
 });
