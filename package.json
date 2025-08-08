@@ -1,7 +1,6 @@
 {
-  "name": "api-express-postgresql",
+  "name": "api-interacoes",
   "version": "1.0.0",
-  "description": "API Express com PostgreSQL",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
