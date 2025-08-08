@@ -1,3 +1,5 @@
+require('dotenv').config();  // Carregar variáveis de ambiente
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Pool } = require('pg');
@@ -29,7 +31,7 @@ function authMiddleware(req, res, next) {
   next();
 }
 
-// Função para converter valores em booleano
+// Função para garantir valores booleanos
 function toBoolean(value) {
   return value === 'true' || value === true;
 }
@@ -97,7 +99,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
 
   try {
     const sql = `UPDATE interacoes SET ${atualizacoes.join(', ')} WHERE callid = $${valores.length + 1}`;
-    valores.push(callid);
+    valores.push(callid); // Adicionar o valor do callid no final
     await pool.query(sql, valores);
     res.json({ message: 'Interação atualizada com sucesso' });
   } catch (error) {
