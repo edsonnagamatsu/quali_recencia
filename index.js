@@ -14,9 +14,7 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || 'nivus2022ram2025',
   database: process.env.DB_NAME || 'ngdbqlc_01',
   port: process.env.DB_PORT || 5432
-   ssl: {
-    rejectUnauthorized: false // necessário para RDS
-  }
+  ssl: {rejectUnauthorized: false}
 });
 
 // Middleware de autenticação simples
