@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Pool } = require('pg');
@@ -9,12 +10,12 @@ app.use(bodyParser.json());
 
 // Conexão com PostgreSQL
 const pool = new Pool({
-  host: process.env.DB_HOST || 'ngdbpost01.co5s88m0usk0.us-east-1.rds.amazonaws.com',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'nivus2022ram2025',
-  database: process.env.DB_NAME || 'ngdbqlc_01',
-  port: process.env.DB_PORT || 5432
-  ssl: {rejectUnauthorized: false}
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT,
+  ssl: { rejectUnauthorized: false }
 });
 
 // Middleware de autenticação simples
@@ -32,36 +33,24 @@ function authMiddleware(req, res, next) {
 // Inserir nova interação
 app.post('/interacoes', authMiddleware, async (req, res) => {
   const {
-    data,
-    ani,
-    callid,
-    cpf,
-    solicitou_fatura,
-    solicitou_recibo,
-    solicitou_ir,
-    solicitou_carteirinha
+    data, ani, callid, cpf,
+    solicitou_fatura, solicitou_recibo,
+    solicitou_ir, solicitou_carteirinha
   } = req.body;
 
   try {
-    const sql = `
+    const sql = \`
       INSERT INTO interacoes (
         data, ani, callid, cpf,
         solicitou_fatura, solicitou_recibo,
         solicitou_ir, solicitou_carteirinha
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `;
-
+    \`;
     const values = [
-      data,
-      ani,
-      callid,
-      cpf,
-      solicitou_fatura,
-      solicitou_recibo,
-      solicitou_ir,
-      solicitou_carteirinha
+      data, ani, callid, cpf,
+      solicitou_fatura, solicitou_recibo,
+      solicitou_ir, solicitou_carteirinha
     ];
-
     await pool.query(sql, values);
     res.status(201).json({ message: 'Interação inserida com sucesso' });
   } catch (error) {
@@ -70,7 +59,7 @@ app.post('/interacoes', authMiddleware, async (req, res) => {
   }
 });
 
-// Atualizar campos booleanos dinamicamente com base no callid
+// Atualizar campos booleanos com base no callid
 app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   const { callid } = req.params;
   const campos = ['solicitou_fatura', 'solicitou_recibo', 'solicitou_ir', 'solicitou_carteirinha'];
@@ -79,7 +68,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
 
   campos.forEach((campo, idx) => {
     if (req.body.hasOwnProperty(campo)) {
-      atualizacoes.push(`${campo} = $${idx + 1}`);
+      atualizacoes.push(\`\${campo} = $\${idx + 1}\`);
       valores.push(req.body[campo]);
     }
   });
@@ -89,7 +78,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   }
 
   try {
-    const sql = `UPDATE interacoes SET ${atualizacoes.join(', ')} WHERE callid = $${valores.length + 1}`;
+    const sql = \`UPDATE interacoes SET \${atualizacoes.join(', ')} WHERE callid = $\${valores.length + 1}\`;
     valores.push(callid);
     await pool.query(sql, valores);
     res.json({ message: 'Interação atualizada com sucesso' });
@@ -114,23 +103,23 @@ app.get('/interacoes', authMiddleware, async (req, res) => {
   let idx = 1;
 
   if (cpf) {
-    filtros.push(`cpf = $${idx++}`);
+    filtros.push(\`cpf = $\${idx++}\`);
     valores.push(cpf);
   }
 
   if (tipo && campos[tipo]) {
-    filtros.push(`${campos[tipo]} = true`);
+    filtros.push(\`\${campos[tipo]} = true\`);
   }
 
   if (horas) {
-    filtros.push(`data >= NOW() - INTERVAL '${horas} HOURS'`);
+    filtros.push(\`data >= NOW() - INTERVAL '\${horas} HOURS'\`);
   }
 
-  const sql = `
-    SELECT cpf, ${Object.values(campos).join(', ')}, data
+  const sql = \`
+    SELECT cpf, \${Object.values(campos).join(', ')}, data
     FROM interacoes
-    ${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''}
-  `;
+    \${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''}
+  \`;
 
   try {
     const result = await pool.query(sql, valores);
@@ -142,5 +131,5 @@ app.get('/interacoes', authMiddleware, async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`API rodando na porta ${port}`);
+  console.log(\`API rodando na porta \${port}\`);
 });
