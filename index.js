@@ -79,8 +79,10 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
 
   campos.forEach((campo, idx) => {
     if (req.body.hasOwnProperty(campo)) {
+      // Garantir que o valor seja booleano
+      const valor = req.body[campo] === 'true' || req.body[campo] === true;
       atualizacoes.push(`${campo} = $${idx + 1}`);
-      valores.push(req.body[campo]);
+      valores.push(valor);
     }
   });
 
