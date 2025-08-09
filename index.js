@@ -25,7 +25,7 @@ function authMiddleware(req, res, next) {
   if (!authHeader) return res.status(401).json({ error: 'Token não fornecido' });
 
   const token = authHeader.split(' ')[1];
-  if (token !== process.env.AUTH_TOKEN) {
+  if (token !== 'jxmVZ2P9atWHVOxWtLVkbLeGouxxXTEUyMb5ZTVQw9U=') {
     return res.status(403).json({ error: 'Token inválido' });
   }
   next();
