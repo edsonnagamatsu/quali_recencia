@@ -38,9 +38,7 @@ function toBoolean(value) {
 
 // ===================== ROTAS =====================
 
-// (REMOVIDA) POST /interacoes  — inserção por corpo
-
-// Atualizar flags pelo callid (PATCH)
+// Atualizar flags pelo callid (PATCH) — agora só confirma sucesso se a linha existir
 app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   const { callid } = req.params;
   const campos = ['solicitou_fatura', 'solicitou_recibo', 'solicitou_ir', 'solicitou_carteirinha'];
@@ -50,7 +48,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   let paramIndex = 1;
 
   campos.forEach(campo => {
-    if (req.body.hasOwnProperty(campo)) {
+    if (Object.prototype.hasOwnProperty.call(req.body, campo)) {
       const valor = toBoolean(req.body[campo]);
       atualizacoes.push(`${campo} = $${paramIndex}`);
       valores.push(valor);
@@ -67,10 +65,16 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
       UPDATE interacoes
       SET ${atualizacoes.join(', ')}
       WHERE callid = $${paramIndex}
+      RETURNING callid, ${campos.join(', ')}
     `;
     valores.push(callid);
-    await pool.query(sql, valores);
-    res.json({ message: 'Interação atualizada com sucesso' });
+    const result = await pool.query(sql, valores);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'callid não encontrado. Use POST /interacoes/:callid para criá-lo.' });
+    }
+
+    res.json({ message: 'Interação atualizada com sucesso', updated: result.rows[0] });
   } catch (error) {
     console.error('Erro ao atualizar interação:', error);
     res.status(500).json({ error: 'Erro ao atualizar' });
@@ -108,6 +112,7 @@ app.get('/interacoes', authMiddleware, async (req, res) => {
     SELECT cpf, ${Object.values(campos).join(', ')}, data
     FROM interacoes
     ${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''}
+    ORDER BY data DESC NULLS LAST
   `;
 
   try {
@@ -208,6 +213,7 @@ app.post('/interacoes/:callid', authMiddleware, async (req, res) => {
             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
             $1, $2, $3, $4, $5, $6, $7
           )
+          RETURNING callid, ani, cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, data
         `;
         const insertVals = [
           aniNorm,
@@ -218,9 +224,9 @@ app.post('/interacoes/:callid', authMiddleware, async (req, res) => {
           toBoolean(solicitou_ir),
           toBoolean(solicitou_carteirinha),
         ];
-        await client.query(insertSql, insertVals);
+        const created = await client.query(insertSql, insertVals);
         await client.query('COMMIT');
-        return res.status(201).json({ message: 'Criado com sucesso (callid novo).' });
+        return res.status(201).json({ message: 'Criado com sucesso (callid novo).', created: created.rows[0] });
       } else {
         // atualiza apenas campos enviados (não altera a data)
         const sets = [];
@@ -249,11 +255,11 @@ app.post('/interacoes/:callid', authMiddleware, async (req, res) => {
           return res.status(200).json({ message: 'Já existia; nada para atualizar.' });
         }
 
-        const updateSql = `UPDATE interacoes SET ${sets.join(', ')} WHERE callid = $${i}`;
+        const updateSql = `UPDATE interacoes SET ${sets.join(', ')} WHERE callid = $${i} RETURNING callid, ani, cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, data`;
         vals.push(callid);
-        await client.query(updateSql, vals);
+        const updated = await client.query(updateSql, vals);
         await client.query('COMMIT');
-        return res.json({ message: 'Atualizado (callid já existente).' });
+        return res.json({ message: 'Atualizado (callid já existente).', updated: updated.rows[0] });
       }
     } catch (e) {
       await client.query('ROLLBACK');
@@ -305,6 +311,7 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
             $1, $2, $3, $4, $5, $6, $7
           )
+          RETURNING callid, ani, cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, data
         `;
         const insertVals = [
           aniNorm,
@@ -315,9 +322,9 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
           toBoolean(solicitou_ir),
           toBoolean(solicitou_carteirinha),
         ];
-        await client.query(insertSql, insertVals);
+        const created = await client.query(insertSql, insertVals);
         await client.query('COMMIT');
-        return res.status(201).json({ message: 'Criado com sucesso (callid novo).' });
+        return res.status(201).json({ message: 'Criado com sucesso (callid novo).', created: created.rows[0] });
       } else {
         const sets = [];
         const vals = [];
@@ -334,11 +341,11 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
           }
         }
 
-        const updateSql = `UPDATE interacoes SET ${sets.join(', ')} WHERE callid = $${i}`;
+        const updateSql = `UPDATE interacoes SET ${sets.join(', ')} WHERE callid = $${i} RETURNING callid, ani, cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, data`;
         vals.push(callid);
-        await client.query(updateSql, vals);
+        const updated = await client.query(updateSql, vals);
         await client.query('COMMIT');
-        return res.json({ message: 'Atualizado (callid já existente).' });
+        return res.json({ message: 'Atualizado (callid já existente).', updated: updated.rows[0] });
       }
     } catch (e) {
       await client.query('ROLLBACK');
