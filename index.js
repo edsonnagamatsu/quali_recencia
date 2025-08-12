@@ -33,66 +33,14 @@ function authMiddleware(req, res, next) {
 
 // Função para garantir valores booleanos
 function toBoolean(value) {
-  return value === 'true' || value === true;
+  return value === 'true' || value === true || value === 1 || value === '1';
 }
 
-// Inserir nova interação
-app.post('/interacoes', authMiddleware, async (req, res) => {
-  let {
-    data,
-    ani,
-    callid,
-    cpf,
-    solicitou_fatura,
-    solicitou_recibo,
-    solicitou_ir,
-    solicitou_carteirinha
-  } = req.body;
+// ===================== ROTAS =====================
 
-  try {
-    // Valida data
-    if (data) {
-      const dt = new Date(data);
-      if (isNaN(dt.getTime())) {
-        return res.status(400).json({ error: 'Data inválida' });
-      }
-      data = dt.toISOString();
-    } else {
-      data = null;
-    }
+// (REMOVIDA) POST /interacoes  — inserção por corpo
 
-    if (!callid || !cpf) {
-      return res.status(400).json({ error: 'callid e cpf são obrigatórios' });
-    }
-
-    const sql = `
-      INSERT INTO interacoes (
-        data, ani, callid, cpf,
-        solicitou_fatura, solicitou_recibo,
-        solicitou_ir, solicitou_carteirinha
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `;
-
-    const values = [
-      data,
-      ani || null,
-      callid,
-      cpf,
-      toBoolean(solicitou_fatura),
-      toBoolean(solicitou_recibo),
-      toBoolean(solicitou_ir),
-      toBoolean(solicitou_carteirinha)
-    ];
-
-    await pool.query(sql, values);
-    res.status(201).json({ message: 'Interação inserida com sucesso' });
-  } catch (error) {
-    console.error('Erro ao inserir interação:', error);
-    res.status(500).json({ error: 'Erro ao inserir' });
-  }
-});
-
-// Atualizar campos booleanos dinamicamente com base no callid
+// Atualizar flags pelo callid (PATCH)
 app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   const { callid } = req.params;
   const campos = ['solicitou_fatura', 'solicitou_recibo', 'solicitou_ir', 'solicitou_carteirinha'];
@@ -129,7 +77,7 @@ app.patch('/interacoes/:callid', authMiddleware, async (req, res) => {
   }
 });
 
-// Buscar interações com filtros
+// Buscar interações (GET)
 app.get('/interacoes', authMiddleware, async (req, res) => {
   const { cpf, tipo, horas } = req.query;
   const campos = {
@@ -171,7 +119,7 @@ app.get('/interacoes', authMiddleware, async (req, res) => {
   }
 });
 
-// Contar interações com filtros
+// Contar interações (GET /interacoes/count)
 app.get('/interacoes/count', authMiddleware, async (req, res) => {
   const { cpf, solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha, dias } = req.query;
 
@@ -218,10 +166,10 @@ app.get('/interacoes/count', authMiddleware, async (req, res) => {
   }
 });
 
-// Upsert por callid: cria se não existir; atualiza se existir
-app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
+// Upsert usando callid no PATH (/interacoes/:callid)
+app.post('/interacoes/:callid', authMiddleware, async (req, res) => {
+  const { callid } = req.params;
   const {
-    callid,
     ani = null,
     cpf = null,
     solicitou_fatura,
@@ -243,7 +191,10 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const exists = await client.query('SELECT 1 FROM interacoes WHERE callid = $1 LIMIT 1', [callid]);
+      const exists = await client.query(
+        'SELECT 1 FROM interacoes WHERE callid = $1 LIMIT 1',
+        [callid]
+      );
 
       if (exists.rowCount === 0) {
         // cria registro novo com data no fuso America/Sao_Paulo
@@ -306,6 +257,91 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
       }
     } catch (e) {
       await client.query('ROLLBACK');
+      console.error('Erro upsert /interacoes/:callid:', e);
+      return res.status(500).json({ error: 'Erro ao processar /interacoes/:callid' });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Erro de conexão:', err);
+    return res.status(500).json({ error: 'Erro de conexão com banco' });
+  }
+});
+
+// (compat) Upsert por body segue disponível
+app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
+  const {
+    callid,
+    ani = null,
+    cpf = null,
+    solicitou_fatura,
+    solicitou_recibo,
+    solicitou_ir,
+    solicitou_carteirinha
+  } = req.body || {};
+
+  if (!callid) {
+    return res.status(400).json({ error: 'callid é obrigatório' });
+  }
+
+  const aniNorm = typeof ani === 'string' && ani.trim() === '' ? null : ani;
+  const cpfNorm = typeof cpf === 'string' && cpf.trim() === '' ? null : cpf;
+
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const exists = await client.query('SELECT 1 FROM interacoes WHERE callid = $1 LIMIT 1', [callid]);
+
+      if (exists.rowCount === 0) {
+        const insertSql = `
+          INSERT INTO interacoes (
+            data, ani, callid, cpf,
+            solicitou_fatura, solicitou_recibo,
+            solicitou_ir, solicitou_carteirinha
+          )
+          VALUES (
+            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+            $1, $2, $3, $4, $5, $6, $7
+          )
+        `;
+        const insertVals = [
+          aniNorm,
+          callid,
+          cpfNorm,
+          toBoolean(solicitou_fatura),
+          toBoolean(solicitou_recibo),
+          toBoolean(solicitou_ir),
+          toBoolean(solicitou_carteirinha),
+        ];
+        await client.query(insertSql, insertVals);
+        await client.query('COMMIT');
+        return res.status(201).json({ message: 'Criado com sucesso (callid novo).' });
+      } else {
+        const sets = [];
+        const vals = [];
+        let i = 1;
+
+        sets.push(`ani = $${i++}`); vals.push(aniNorm);
+        sets.push(`cpf = $${i++}`); vals.push(cpfNorm);
+
+        const flags = { solicitou_fatura, solicitou_recibo, solicitou_ir, solicitou_carteirinha };
+        for (const k of Object.keys(flags)) {
+          if (Object.prototype.hasOwnProperty.call(req.body, k)) {
+            sets.push(`${k} = $${i++}`);
+            vals.push(toBoolean(flags[k]));
+          }
+        }
+
+        const updateSql = `UPDATE interacoes SET ${sets.join(', ')} WHERE callid = $${i}`;
+        vals.push(callid);
+        await client.query(updateSql, vals);
+        await client.query('COMMIT');
+        return res.json({ message: 'Atualizado (callid já existente).' });
+      }
+    } catch (e) {
+      await client.query('ROLLBACK');
       console.error('Erro upsert chamada1234551:', e);
       return res.status(500).json({ error: 'Erro ao processar chamada1234551' });
     } finally {
@@ -316,7 +352,6 @@ app.post('/interacoes/chamada1234551', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: 'Erro de conexão com banco' });
   }
 });
-
 
 app.listen(port, () => {
   console.log(`API rodando na porta ${port}`);
